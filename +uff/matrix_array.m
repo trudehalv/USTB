@@ -47,7 +47,7 @@ classdef matrix_array < uff.probe
     %% update method
     methods 
         function update(h)
-            if ~isempty(h.pitch_x)&&~isempty(h.pitch_y)&&~isempty(h.N_x)&&~isempty(h.N_y)&~h.lock_geometry
+            if ~isempty(h.pitch_x)&&~isempty(h.pitch_y)&&~isempty(h.N_x)&&~isempty(h.N_y)&&~h.lock_geometry
                 
                 if isempty(h.element_width)
                     h.element_width=h.pitch_x;
@@ -78,32 +78,32 @@ classdef matrix_array < uff.probe
         function set.pitch_x(h,in_pitch)
             assert(numel(in_pitch)==1, 'The input should be a scalar in [m]');
             h.pitch_x=in_pitch;
-            h.update()
+            h.update();
         end
         function set.pitch_y(h,in_pitch)
             assert(numel(in_pitch)==1, 'The input should be a scalar in [m]');
             h.pitch_y=in_pitch;
-            h.update()
+            h.update();
         end
         function set.N_x(h,in_N_elements)
             assert(numel(in_N_elements)==1, 'The input should be a scalar');
             h.N_x=in_N_elements;
-            h.update()
+            h.update();
         end
         function set.N_y(h,in_N_elements)
             assert(numel(in_N_elements)==1, 'The input should be a scalar');
             h.N_y=in_N_elements;
-            h.update()
+            h.update();
         end
         function set.element_width(h,in_width)
             assert(numel(in_width)==1, 'The input should be a scalar in [m]');
             h.element_width=in_width;
-            h.update()
+            h.update();
         end
         function set.element_height(h,in_height)
             assert(numel(in_height)==1, 'The input should be a scalar in [m]');
             h.element_height=in_height;
-            h.update()
+            h.update();
         end
     end
     

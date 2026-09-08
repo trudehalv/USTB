@@ -41,7 +41,7 @@ classdef curvilinear_matrix_array < uff.matrix_array
     %% update method
     methods 
         function h=update(h)
-            if ~isempty(h.pitch_x)&&~isempty(h.pitch_y)&&~isempty(h.N_x)&&~isempty(h.N_y)&&~isempty(h.radius_x)&~h.lock_geometry
+            if ~isempty(h.pitch_x)&&~isempty(h.pitch_y)&&~isempty(h.N_x)&&~isempty(h.N_y)&&~isempty(h.radius_x)&&~h.lock_geometry
                 
                 if isempty(h.element_width)
                     h.element_width=h.pitch_x;
