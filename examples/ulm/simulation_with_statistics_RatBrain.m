@@ -25,7 +25,7 @@ invivo_scan = tools.scan_integer_upscale(invivo_scan, 2);
 % Preprocess SVD-filter
 svd = preprocess.svd_filter();
 svd.input = invivo_ch_data;
-svd.cutoff = 5;
+svd.cutoff = 2;
 svd_ch_data = svd.go();
 
 %%
@@ -35,7 +35,7 @@ das.dimension = dimension.transmit;
 %das.channel_data = invivo_ch_data;
 das.channel_data = svd_ch_data; % With SVD filtering
 das.scan = invivo_scan;
-das.receive_apodization.f_number = 0.8;
+das.receive_apodization.f_number = 0.8; 
 das.receive_apodization.window = uff.window.hamming;
 
 % ... and the coherence factor ...
@@ -82,14 +82,14 @@ u.fwhm = [3 3];
 % positives, instead of potentially discarding true positives. For this
 % pure example, however, we know there are a maximum of 41 particles in 
 % any given frame, meaning its a good estimate to use here.
-u.numberOfParticles = 90;
+u.numberOfParticles = 40;
 
 % The last 3 parameters are a bit more advanced and not well documented in
 % the toolbox yet. For now, see Chapter 3.3 "ULM implementation in USTB" 
 % of Simon A. Bjørn's master's thesis.
 u.NLocalMax = 2;
 u.max_linking_distance = 3; 
-u.min_length = 5;
+u.min_length = 15;
 
 
 % The next two options are not parameters, but settings deciding how the
