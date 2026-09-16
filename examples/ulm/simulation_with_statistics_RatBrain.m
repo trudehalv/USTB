@@ -1,5 +1,5 @@
 %% Step 1: Data Loading
-% Start by loading the first chunk of channel data, the uff scan object and
+% Start by loading the first chunk of channel data and the uff scan object 
 file_path = [ustb_path(),'/data/']; 
 invivo_ch_data = uff.read_object([file_path filesep 'InVivoRatBrain.uff'], '/1/channel_data');
 invivo_scan = uff.read_object([file_path filesep 'InVivoRatBrain.uff'], '/scan');
@@ -41,6 +41,7 @@ das.receive_apodization.window = uff.window.hamming;
 % ... and the coherence factor ...
 cf = postprocess.coherence_factor();
 cf.dimension = dimension.receive;
+
 
 % Before computing them, setting a higher framerate, and displaying the
 % results.
