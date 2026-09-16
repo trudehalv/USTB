@@ -1,4 +1,3 @@
-clearvars;
 %% Step 1: Downloading and unpacking the dataset
 local_path = [ustb_path(),'/data/']; 
 base_url = 'https://zenodo.org/records/7883227/files/';
@@ -40,8 +39,6 @@ for tx_i = 1:param.numRcv
         'Apod', ones(1,Trans.numelements)', ...
         'Delay', zeros(1,Trans.numelements)');
 end
-
-%param.speedOfSound = param.SpeedOfSound;
 
 % Using Verasonics module to convert PALA data to UFF
 device = verasonics();
