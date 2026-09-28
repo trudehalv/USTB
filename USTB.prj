@@ -7,18 +7,36 @@
     <param.summary>USTB: a toolbox for ultrasonic signal processing</param.summary>
     <param.description>USTB is a free MATLAB toolbox for processing ultrasonic signals Its aim is to facilitate the comparison of imaging techniques and the dissemination of research results. USTB covers processing techniques for both tissue and flow visualization, as well as other image processing techniques.</param.description>
     <param.screenshot>${PROJECT_ROOT}\helpfiles\USTB_logo.png</param.screenshot>
-    <param.version>2.3.1</param.version>
+    <param.version>3.0.0</param.version>
     <param.output>${PROJECT_ROOT}\USTB.mltbx</param.output>
     <param.products.name />
     <param.products.id />
     <param.products.version />
     <param.platforms />
     <param.guid>3031614d-fa67-41fa-8301-faea1d207ec1</param.guid>
-    <param.exclude.filters>data/*
+    <param.exclude.filters>data/**
 .uff
 .mat
 .mltbx
-.prj</param.exclude.filters>
+.prj
+.git
+.github/**
+.gitignore
+.asv
+python/**
+website/**
+docs/**
+tests/**
+scripts/**
+examples_html/**
+publications_html/**
+Figures/**
+logs/**
+AGENTS.md
+build_toolbox.m
+run_tests_matlab.m
+*.tar.gz
+*.log</param.exclude.filters>
     <param.exclude.pcodedmfiles>true</param.exclude.pcodedmfiles>
     <param.examples>&lt;?xml version="1.0" encoding="utf-8"?&gt;
 &lt;examples&gt;
@@ -524,7 +542,7 @@
     <param.apps />
     <param.registered.apps />
     <param.docs>${PROJECT_ROOT}\info.xml</param.docs>
-    <param.getting.started.guide>${PROJECT_ROOT}\doc\GettingStarted.mlx</param.getting.started.guide>
+    <param.getting.started.guide />
     <param.matlabpath.excludes>
       <item>/examples/fresnel/curvilinear_array</item>
     </param.matlabpath.excludes>
@@ -585,22 +603,22 @@
       <file>${PROJECT_ROOT}\+preprocess</file>
       <file>${PROJECT_ROOT}\+tools</file>
       <file>${PROJECT_ROOT}\+uff</file>
-      <file>${PROJECT_ROOT}\.git</file>
-      <file>${PROJECT_ROOT}\.gitignore</file>
+      <file>${PROJECT_ROOT}\+ulm</file>
       <file>${PROJECT_ROOT}\@alpinion</file>
       <file>${PROJECT_ROOT}\@fresnel</file>
       <file>${PROJECT_ROOT}\@unit_test</file>
       <file>${PROJECT_ROOT}\@verasonics</file>
+      <file>${PROJECT_ROOT}\CITATION.cff</file>
+      <file>${PROJECT_ROOT}\citation.bib</file>
       <file>${PROJECT_ROOT}\code.m</file>
       <file>${PROJECT_ROOT}\data</file>
       <file>${PROJECT_ROOT}\data_path.m</file>
       <file>${PROJECT_ROOT}\demos.xml</file>
       <file>${PROJECT_ROOT}\dimension.m</file>
-      <file>${PROJECT_ROOT}\doc</file>
       <file>${PROJECT_ROOT}\examples</file>
       <file>${PROJECT_ROOT}\helpfiles</file>
       <file>${PROJECT_ROOT}\info.xml</file>
-      <file>${PROJECT_ROOT}\logs</file>
+      <file>${PROJECT_ROOT}\LICENSE</file>
       <file>${PROJECT_ROOT}\midprocess.m</file>
       <file>${PROJECT_ROOT}\pipeline.m</file>
       <file>${PROJECT_ROOT}\postprocess.m</file>
