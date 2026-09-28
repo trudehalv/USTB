@@ -7,7 +7,7 @@
     <param.summary>USTB: a toolbox for ultrasonic signal processing</param.summary>
     <param.description>USTB is a free MATLAB toolbox for processing ultrasonic signals Its aim is to facilitate the comparison of imaging techniques and the dissemination of research results. USTB covers processing techniques for both tissue and flow visualization, as well as other image processing techniques.</param.description>
     <param.screenshot>${PROJECT_ROOT}\helpfiles\USTB_logo.png</param.screenshot>
-    <param.version>2.3.1</param.version>
+    <param.version>3.0.0</param.version>
     <param.output>${PROJECT_ROOT}\USTB.mltbx</param.output>
     <param.products.name />
     <param.products.id />
@@ -585,22 +585,22 @@
       <file>${PROJECT_ROOT}\+preprocess</file>
       <file>${PROJECT_ROOT}\+tools</file>
       <file>${PROJECT_ROOT}\+uff</file>
-      <file>${PROJECT_ROOT}\.git</file>
-      <file>${PROJECT_ROOT}\.gitignore</file>
+      <file>${PROJECT_ROOT}\+ulm</file>
       <file>${PROJECT_ROOT}\@alpinion</file>
       <file>${PROJECT_ROOT}\@fresnel</file>
       <file>${PROJECT_ROOT}\@unit_test</file>
       <file>${PROJECT_ROOT}\@verasonics</file>
+      <file>${PROJECT_ROOT}\CITATION.cff</file>
+      <file>${PROJECT_ROOT}\citation.bib</file>
       <file>${PROJECT_ROOT}\code.m</file>
       <file>${PROJECT_ROOT}\data</file>
       <file>${PROJECT_ROOT}\data_path.m</file>
       <file>${PROJECT_ROOT}\demos.xml</file>
       <file>${PROJECT_ROOT}\dimension.m</file>
-      <file>${PROJECT_ROOT}\doc</file>
       <file>${PROJECT_ROOT}\examples</file>
       <file>${PROJECT_ROOT}\helpfiles</file>
       <file>${PROJECT_ROOT}\info.xml</file>
-      <file>${PROJECT_ROOT}\logs</file>
+      <file>${PROJECT_ROOT}\LICENSE</file>
       <file>${PROJECT_ROOT}\midprocess.m</file>
       <file>${PROJECT_ROOT}\pipeline.m</file>
       <file>${PROJECT_ROOT}\postprocess.m</file>
