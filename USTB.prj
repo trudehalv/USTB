@@ -14,11 +14,29 @@
     <param.products.version />
     <param.platforms />
     <param.guid>3031614d-fa67-41fa-8301-faea1d207ec1</param.guid>
-    <param.exclude.filters>data/*
+    <param.exclude.filters>data/**
 .uff
 .mat
 .mltbx
-.prj</param.exclude.filters>
+.prj
+.git
+.github/**
+.gitignore
+.asv
+python/**
+website/**
+docs/**
+tests/**
+scripts/**
+examples_html/**
+publications_html/**
+Figures/**
+logs/**
+AGENTS.md
+build_toolbox.m
+run_tests_matlab.m
+*.tar.gz
+*.log</param.exclude.filters>
     <param.exclude.pcodedmfiles>true</param.exclude.pcodedmfiles>
     <param.examples>&lt;?xml version="1.0" encoding="utf-8"?&gt;
 &lt;examples&gt;
