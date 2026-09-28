@@ -524,7 +524,7 @@
     <param.apps />
     <param.registered.apps />
     <param.docs>${PROJECT_ROOT}\info.xml</param.docs>
-    <param.getting.started.guide>${PROJECT_ROOT}\doc\GettingStarted.mlx</param.getting.started.guide>
+    <param.getting.started.guide />
     <param.matlabpath.excludes>
       <item>/examples/fresnel/curvilinear_array</item>
     </param.matlabpath.excludes>
