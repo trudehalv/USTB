@@ -2,13 +2,19 @@
 local_path = [ustb_path(),'/data/']; 
 base_url = 'https://zenodo.org/records/7883227/files/';
 
-%%
-% Downloading first 25 RF files
-fprintf("Donwloading in vivo rat brain data");
+%% Download first 25 RF files
+fprintf("Downloading in vivo rat brain data");
 RF_url = [base_url 'RF_001_to_025.zip?download=1'];
 RF_file = [local_path 'RF_001_to_025.zip'];
 websave(RF_file, RF_url)
 unzip(RF_file, local_path);
+fprintf("Done!");
+
+%% Download metadata
+fprintf("Downloading metadata");
+meta_url = [base_url 'param.mat?download=1'];
+meta_file = [local_path 'param.mat'];
+websave(meta_file, meta_url);
 fprintf("Done!");
 
 %% Step 2: Initial data loading
@@ -17,7 +23,6 @@ fprintf("Done!");
 
 % Loading metadata
 load([local_path filesep 'param.mat']);
-N_chunks = 1; % N_chunks = 25
 
 % Create TX structure
 TX = struct( ...
@@ -64,8 +69,9 @@ device.Resource = struct( ...
 %   /2/channel_data
 %   ...
 %   /20/channel_data
-% 
 
+
+N_chunks = 1; % Loading only first chunk
 for chunk_i = 1:N_chunks
     if N_chunks > 1
 
