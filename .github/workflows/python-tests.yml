@@ -25,4 +25,4 @@ jobs:
 
       - name: Run unit tests
         working-directory: python
-        run: pytest tests/test_enums.py tests/test_apodization.py tests/test_beamformed_data.py tests/test_das.py -v
+        run: pytest tests/ -v -rs
