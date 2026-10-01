@@ -21,17 +21,6 @@ MIN_ENVELOPE_CORR = 0.999
 MAX_RELATIVE_ERROR = 1e-2
 
 
-# The Python Apodization does not implement transmit windows other than none and
-# scanline (it returns all ones), so the PICMUS examples, which use a tukey50
-# transmit window with f-number 1.7, differ from MATLAB: envelope correlation
-# 0.986-0.995 and ~25% relative complex error. strict=True makes these tests
-# fail once transmit apodization is implemented, so the marker gets removed.
-xfail_transmit_apodization = pytest.mark.xfail(
-    strict=True,
-    reason="Python transmit apodization ignores windows other than none/scanline",
-)
-
-
 def assert_matches_matlab(ref_file, b_data, name):
     """Compare Python beamformed data with the MATLAB reference, pixel by pixel."""
     with h5py.File(ref_file, "r") as f:
@@ -78,7 +67,6 @@ class TestPICMUSExperimentResolution:
         return main()
 
     @pytest.mark.skipif(not os.path.exists(REF), reason="Reference not available")
-    @xfail_transmit_apodization
     def test_should_match_matlab_per_pixel(self, result):
         assert_matches_matlab(self.REF, result, "PICMUS Exp Resolution")
 
@@ -99,7 +87,6 @@ class TestPICMUSSimulationResolution:
         return main()
 
     @pytest.mark.skipif(not os.path.exists(REF), reason="Reference not available")
-    @xfail_transmit_apodization
     def test_should_match_matlab_per_pixel(self, result):
         assert_matches_matlab(self.REF, result, "PICMUS Sim Resolution")
 
@@ -120,7 +107,6 @@ class TestPICMUSExperimentContrast:
         return main()
 
     @pytest.mark.skipif(not os.path.exists(REF), reason="Reference not available")
-    @xfail_transmit_apodization
     def test_should_match_matlab_per_pixel(self, result):
         assert_matches_matlab(self.REF, result, "PICMUS Exp Contrast")
 
@@ -141,7 +127,6 @@ class TestPICMUSSimulationContrast:
         return main()
 
     @pytest.mark.skipif(not os.path.exists(REF), reason="Reference not available")
-    @xfail_transmit_apodization
     def test_should_match_matlab_per_pixel(self, result):
         assert_matches_matlab(self.REF, result, "PICMUS Sim Contrast")
 
