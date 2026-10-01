@@ -127,7 +127,7 @@ The Python API mirrors MATLAB as closely as possible:
 
 - **Pixel ordering**: MATLAB `sector_scan` uses Fortran-order (depth varies fastest), `pyuff_ustb` uses C-order (azimuth varies fastest). The beamformer handles both correctly; the difference only affects 2D reshape for display.
 - **Wavefront enum**: `pyuff_ustb.Wavefront` and `ustb.enums.Wavefront` are different types. The DAS code compares by `.value` to handle both.
-- **Apodization**: Receive and transmit (plane/diverging wave) apodization are ports of `+uff/apodization.m` and match MATLAB to float precision (`tests/test_apodization_vs_matlab.py`). Exceptions: the scanline window is a simplified implementation that differs at the sector-scan origin; and where MATLAB windows give NaN (pixels at exactly zero depth), Python gives 0.
+- **Apodization**: Receive, transmit (plane/diverging wave) and scanline (MLA) apodization are ports of `+uff/apodization.m` and match MATLAB to float precision (`tests/test_apodization_vs_matlab.py`). Where MATLAB windows give NaN (pixels at exactly zero depth), Python gives 0. Scanline apodization needs a scan with axes (`LinearScan` or `SectorScan`).
 
 #### Running Python tests
 

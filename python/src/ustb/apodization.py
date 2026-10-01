@@ -257,30 +257,81 @@ class Apodization:
         return tan_theta, tan_phi
 
     def _scanline_apodization(self):
-        """Scanline apodization for focused imaging."""
-        N_pixels = getattr(self.focus, "N_pixels", None) or self.focus.x.size
+        """Scanline (MLA) apodization: each wave lights up MLA scanlines of the scan.
+
+        Port of the scanline branch of MATLAB uff.apodization. Pixels are
+        assigned to waves by their lateral index (azimuth for sector scans,
+        x for linear scans), with MLA_overlap smoothing between neighbouring
+        groups of scanlines.
+        """
         N_waves = len(self.sequence)
+        mla = self._pair(self.MLA).astype(int)
+        overlap = self._pair(self.MLA_overlap).astype(int)
+        lateral_index, N_lateral = self._scanline_lateral_index()
+        N_elevation = 1  # pyuff_ustb scans have no elevation axis
 
-        scan_x = self.focus.x.ravel()
-        scan_y = self.focus.y.ravel() if self.focus.y is not None else np.zeros_like(scan_x)
+        if mla[1] != 1 or N_waves * mla[0] != N_lateral:
+            raise ValueError(
+                "The number of waves in the sequence does not match with the "
+                "number of scanlines and set MLA."
+            )
 
-        source_az = np.array([w.source.azimuth for w in self.sequence])
+        A = np.zeros((N_lateral, N_elevation))
+        A[:mla[0], :mla[1]] = 1.0
+        kernel = np.ones(overlap + 1) / np.prod(overlap + 1)
+        B = np.zeros((N_waves, N_lateral, N_elevation))
+        for i in range(N_lateral // mla[0]):
+            for j in range(N_elevation // mla[1]):
+                shifted = np.roll(A, (i * mla[0], j * mla[1]), axis=(0, 1))
+                B[i + j * (N_lateral // mla[0])] = _filter2_same(kernel, shifted)
 
-        apo = np.zeros((N_pixels, N_waves), dtype=np.float32)
+        return B[:, lateral_index, 0].T.astype(np.float32)
 
-        if N_waves > 1:
-            d_az = np.abs(np.diff(source_az)).mean()
+    def _scanline_lateral_index(self):
+        """Lateral (azimuth or x) index of every pixel, and the number of scanlines.
+
+        The pixel order is detected from the scan axes, so scans in pyuff_ustb
+        order (lateral axis varying fastest) and in MATLAB order (depth varying
+        fastest) are both handled.
+        """
+        focus = self.focus
+        px, _, pz = self._focus_xyz()
+        azimuth_axis = getattr(focus, "azimuth_axis", None)
+        x_axis = getattr(focus, "x_axis", None)
+
+        if azimuth_axis is not None:
+            azimuth = np.asarray(azimuth_axis, dtype=np.float64).ravel()
+            depth = np.asarray(focus.depth_axis, dtype=np.float64).ravel()
+            depth_grid, lateral = np.meshgrid(depth, np.arange(azimuth.size), indexing="ij")
+            origin = getattr(focus, "origin", None)
+            single = origin is not None and not isinstance(origin, (list, tuple))
+            ox, oz = (origin.x, origin.z) if single else (0.0, 0.0)
+            x_grid = depth_grid * np.sin(azimuth[lateral]) + ox
+            z_grid = depth_grid * np.cos(azimuth[lateral]) + oz
+            N_lateral = azimuth.size
+        elif x_axis is not None:
+            x_values = np.asarray(x_axis, dtype=np.float64).ravel()
+            z_values = np.asarray(focus.z_axis, dtype=np.float64).ravel()
+            lateral, depth_index = np.meshgrid(np.arange(x_values.size), np.arange(z_values.size),
+                                               indexing="ij")
+            x_grid, z_grid = x_values[lateral], z_values[depth_index]
+            N_lateral = x_values.size
         else:
-            d_az = 1.0
+            raise ValueError(
+                "The scan class does not support scanline based beamforming. This must be "
+                "done manually, defining several scans and setting the apodization to none."
+            )
 
-        for n_wave in range(N_waves):
-            az = source_az[n_wave]
-            scan_az = np.arctan2(scan_x, self.focus.z.ravel() + 1e-20)
-            diff = np.abs(scan_az - az)
-            mask = diff <= d_az * self.MLA[0] / 2.0
-            apo[mask, n_wave] = 1.0
-
-        return apo
+        if isinstance(getattr(focus, "origin", None), (list, tuple)):
+            # One origin per scanline: pyuff_ustb cannot compute x for these
+            # scans itself, so assume its default (lateral fastest) ordering
+            return lateral.ravel(order="C"), N_lateral
+        for order in ("C", "F"):
+            if (px.size == x_grid.size
+                    and np.allclose(x_grid.ravel(order=order), px, rtol=0, atol=1e-9)
+                    and np.allclose(z_grid.ravel(order=order), pz, rtol=0, atol=1e-9)):
+                return lateral.ravel(order=order), N_lateral
+        raise ValueError("Could not match the scan pixels to its axes for scanline apodization")
 
     # ------------------------------------------------------------------
     # Windows (MATLAB uff.apodization window methods)
@@ -307,6 +358,15 @@ def _rotate_points(x, y, z, theta, phi):
     if abs(phi) > 0:
         y, z = y * np.cos(phi) - z * np.sin(phi), y * np.sin(phi) + z * np.cos(phi)
     return x, y, z
+
+
+def _filter2_same(kernel, data):
+    """MATLAB filter2(kernel, data, 'same') for 2-D arrays (zero padding)."""
+    from scipy.signal import convolve2d
+
+    full = convolve2d(data, kernel[::-1, ::-1], mode="full")
+    k0, k1 = kernel.shape
+    return full[k0 // 2:k0 // 2 + data.shape[0], k1 // 2:k1 // 2 + data.shape[1]]
 
 
 def _windowed(profile):

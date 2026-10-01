@@ -113,3 +113,67 @@ def test_should_match_matlab_apodization(setup, key, geometry, window, f_number,
     ml = ref[key][:].T[geo["perm"]]  # -> [pixel, element or wave], Python pixel order
     np.testing.assert_allclose(apo.data, ml, rtol=0, atol=1e-5,
                                err_msg=f"{key} differs from MATLAB")
+
+
+# (reference dataset, scan, number of waves, MLA, MLA_overlap)
+SCANLINE_CASES = [
+    ("scanline/sector_mla1", "sector1", None, [1, 1], [0, 0]),
+    ("scanline/sector_mla2", "sector2", None, [2, 1], [0, 0]),
+    ("scanline/sector_mla2_overlap1", "sector2", None, [2, 1], [1, 0]),
+    ("scanline/linear_mla1", "linear", 32, [1, 1], [0, 0]),
+    ("scanline/linear_mla4_overlap0", "linear", 8, [4, 1], [0, 0]),
+    ("scanline/linear_mla4_overlap1", "linear", 8, [4, 1], [1, 0]),
+    ("scanline/linear_mla4_overlap2", "linear", 8, [4, 1], [2, 0]),
+]
+
+
+@pytest.fixture(scope="module")
+def scanline_setup(setup):
+    from pyuff_ustb.objects import LinearScan, SectorScan
+    from pyuff_ustb.objects.point import Point
+    from pyuff_ustb.objects.uff import Uff
+
+    ref, _ = setup
+    phased_sequence = Uff(PHASED_FILE).read("channel_data").sequence
+    depth_axis = ref["scanline/depth_axis"][:].ravel()
+
+    scans = {}
+    for name in ("sector1", "sector2"):
+        scan = SectorScan()
+        scan.__dict__["azimuth_axis"] = ref[f"scanline/{name}/azimuth_axis"][:].ravel()
+        scan.__dict__["depth_axis"] = depth_axis
+        apex = Point()
+        apex.__dict__.update(distance=np.float64(0.0), azimuth=np.float64(0.0),
+                             elevation=np.float64(0.0))
+        scan.__dict__["origin"] = apex
+        perm = match_pixels((ref[f"scanline/{name}/x"][:], ref[f"scanline/{name}/z"][:]),
+                            (scan.x, scan.z))
+        scans[name] = (scan, perm)
+
+    linear = LinearScan()
+    linear.__dict__["x_axis"] = ref["scanline/linear/x_axis"][:].ravel()
+    linear.__dict__["z_axis"] = ref["scanline/linear/z_axis"][:].ravel()
+    perm = match_pixels((ref["scanline/linear/x"][:], ref["scanline/linear/z"][:]),
+                        (linear.x, linear.z))
+    scans["linear"] = (linear, perm)
+    return ref, scans, phased_sequence
+
+
+@pytest.mark.parametrize("key, scan_name, n_waves, mla, overlap", SCANLINE_CASES,
+                         ids=[case[0] for case in SCANLINE_CASES])
+def test_should_match_matlab_scanline_apodization(scanline_setup, key, scan_name,
+                                                  n_waves, mla, overlap):
+    ref, scans, phased_sequence = scanline_setup
+    scan, perm = scans[scan_name]
+
+    apo = Apodization()
+    apo.window = Window.scanline
+    apo.MLA = np.array(mla)
+    apo.MLA_overlap = np.array(overlap)
+    apo.focus = scan
+    # Only the number of waves matters for scanline apodization
+    apo.sequence = phased_sequence if n_waves is None else [None] * n_waves
+
+    ml = ref[key][:].T[perm]
+    np.testing.assert_allclose(apo.data, ml, rtol=0, atol=1e-6,
+                               err_msg=f"{key} differs from MATLAB")

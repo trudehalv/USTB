@@ -62,6 +62,31 @@ for k = {'hanning','tukey25'}
     a = uff.apodization('probe', ver.probe, 'focus', sscan, 'window', uff.window.(k{1}), 'f_number', 1.5);
     w(['/sector/' k{1}], a.data);
 end
+% transmit: scanline (MLA) apodization, sector scans starting at depth 0
+s1 = uff.sector_scan('azimuth_axis', az, 'depth_axis', linspace(0, 110e-3, 32).');
+s2 = uff.sector_scan('azimuth_axis', linspace(az(1), az(end), 2*numel(az)).', 'depth_axis', s1.depth_axis);
+w('/scanline/sector1/x', s1.x); w('/scanline/sector1/z', s1.z); w('/scanline/sector1/azimuth_axis', s1.azimuth_axis);
+w('/scanline/sector2/x', s2.x); w('/scanline/sector2/z', s2.z); w('/scanline/sector2/azimuth_axis', s2.azimuth_axis);
+w('/scanline/depth_axis', s1.depth_axis);
+a = uff.apodization('sequence', ver.sequence, 'focus', s1, 'window', uff.window.scanline);
+w('/scanline/sector_mla1', a.data);
+a = uff.apodization('sequence', ver.sequence, 'focus', s2, 'window', uff.window.scanline, 'MLA', [2 1]);
+w('/scanline/sector_mla2', a.data);
+a = uff.apodization('sequence', ver.sequence, 'focus', s2, 'window', uff.window.scanline, 'MLA', [2 1], 'MLA_overlap', [1 0]);
+w('/scanline/sector_mla2_overlap1', a.data);
+
+% transmit: scanline apodization on a linear scan (only the number of waves matters)
+lscan = uff.linear_scan('x_axis', linspace(-8e-3, 8e-3, 32).', 'z_axis', linspace(0, 30e-3, 20).');
+w('/scanline/linear/x', lscan.x); w('/scanline/linear/z', lscan.z);
+w('/scanline/linear/x_axis', lscan.x_axis); w('/scanline/linear/z_axis', lscan.z_axis);
+lseq = repmat(uff.wave(), 1, 32);
+a = uff.apodization('sequence', lseq, 'focus', lscan, 'window', uff.window.scanline);
+w('/scanline/linear_mla1', a.data);
+for ov = [0 1 2]
+    a = uff.apodization('sequence', lseq(1:8), 'focus', lscan, 'window', uff.window.scanline, 'MLA', [4 1], 'MLA_overlap', [ov 0]);
+    w(sprintf('/scanline/linear_mla4_overlap%d', ov), a.data);
+end
+
 fprintf('saved %s\n', out);
 
 function h5save(f, name, v)

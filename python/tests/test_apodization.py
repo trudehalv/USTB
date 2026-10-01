@@ -206,3 +206,77 @@ class TestApodizationReceiveWindows:
         apo.probe = FakeProbe(16)
         apo.focus = FakeScan(np.linspace(-2e-3, 2e-3, 5), np.zeros(5))
         assert np.all(np.isfinite(apo.data))
+
+
+def _sector_scan(azimuth_axis, depth_axis):
+    from pyuff_ustb.objects import SectorScan
+    from pyuff_ustb.objects.point import Point
+    scan = SectorScan()
+    scan.__dict__["azimuth_axis"] = np.asarray(azimuth_axis, dtype=float)
+    scan.__dict__["depth_axis"] = np.asarray(depth_axis, dtype=float)
+    origin = Point()
+    origin.__dict__.update(distance=np.float64(0.0), azimuth=np.float64(0.0),
+                           elevation=np.float64(0.0))
+    scan.__dict__["origin"] = origin
+    return scan
+
+
+def _linear_scan(x_axis, z_axis):
+    from pyuff_ustb.objects import LinearScan
+    scan = LinearScan()
+    scan.__dict__["x_axis"] = np.asarray(x_axis, dtype=float)
+    scan.__dict__["z_axis"] = np.asarray(z_axis, dtype=float)
+    return scan
+
+
+class TestApodizationScanline:
+    def test_should_assign_sector_pixels_by_azimuth_index_including_the_origin(self):
+        """Depth-0 pixels all sit at the origin; each still belongs to its own scanline."""
+        azimuth = np.linspace(-0.5, 0.5, 5)
+        scan = _sector_scan(azimuth, np.linspace(0, 40e-3, 6))
+        apo = Apodization()
+        apo.window = Window.scanline
+        apo.sequence = [None] * 5
+        apo.focus = scan
+        result = apo.data
+
+        # pyuff_ustb sector scans: azimuth varies fastest
+        azimuth_index = np.arange(scan.x.size) % azimuth.size
+        np.testing.assert_array_equal(result, np.eye(5)[azimuth_index])
+
+    def test_should_light_mla_scanlines_per_wave_on_a_linear_scan(self):
+        scan = _linear_scan(np.linspace(-5e-3, 5e-3, 8), np.linspace(0, 20e-3, 4))
+        apo = Apodization()
+        apo.window = Window.scanline
+        apo.MLA = np.array([2, 1])
+        apo.sequence = [None] * 4
+        apo.focus = scan
+        result = apo.data
+
+        # pyuff_ustb linear scans: z varies fastest
+        x_index = np.arange(scan.x.size) // 4
+        np.testing.assert_array_equal(result, np.eye(4)[x_index // 2])
+
+    def test_should_share_edge_scanlines_with_mla_overlap(self):
+        scan = _linear_scan(np.linspace(-5e-3, 5e-3, 8), [10e-3])
+        apo = Apodization()
+        apo.window = Window.scanline
+        apo.MLA = np.array([4, 1])
+        apo.MLA_overlap = np.array([1, 0])
+        apo.sequence = [None] * 2
+        apo.focus = scan
+        result = apo.data
+
+        # MATLAB filter2(ones(2,1)/2, ..., 'same'): each wave's 4 scanlines are
+        # smoothed with the next one, so scanline 4 is shared by both waves
+        expected = np.array([[1, 1, 1, 0.5, 0, 0, 0, 0],
+                             [0, 0, 0, 0.5, 1, 1, 1, 0.5]]).T
+        np.testing.assert_allclose(result, expected)
+
+    def test_should_reject_a_wave_count_that_does_not_match_the_scanlines(self):
+        apo = Apodization()
+        apo.window = Window.scanline
+        apo.sequence = [None] * 3
+        apo.focus = _linear_scan(np.linspace(-5e-3, 5e-3, 8), [10e-3])
+        with pytest.raises(ValueError):
+            apo.data
