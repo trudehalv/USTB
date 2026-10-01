@@ -134,11 +134,12 @@ The Python API mirrors MATLAB as closely as possible:
 ```bash
 cd python
 
-# Unit tests only (fast, no MATLAB or data needed)
-pytest tests/test_enums.py tests/test_apodization.py tests/test_beamformed_data.py tests/test_das.py
+# All tests (what CI runs); integration tests skip when reference files or datasets are missing
+pytest tests/
 
-# Integration tests (need MATLAB reference files in tests/*.h5 and datasets in data/)
-pytest tests/test_integration_matlab.py tests/test_examples_vs_matlab.py
+# Integration tests only (need MATLAB reference files in tests/*.h5 and datasets in data/).
+# They pair MATLAB and Python pixels by position and compare pixel by pixel.
+pytest tests/test_integration_matlab.py tests/test_examples_vs_matlab.py -s
 ```
 
 To regenerate MATLAB reference data:

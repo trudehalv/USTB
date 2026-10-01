@@ -64,4 +64,4 @@ See the `examples/` directory:
 
 ## Relationship to MATLAB USTB
 
-This package mirrors the MATLAB USTB API as closely as possible. The main classes (`DAS`, `Dimension`, `Window`, `Apodization`) use the same names, properties, and method signatures. Beamformed output matches MATLAB with >0.999 correlation across all tested examples.
+This package mirrors the MATLAB USTB API as closely as possible. The main classes (`DAS`, `Dimension`, `Window`, `Apodization`) use the same names, properties, and method signatures. The integration tests compare against MATLAB pixel by pixel. With transmit and receive windows `none` or `scanline` (CPWC linear and phased-array examples), the beamformed output matches MATLAB to about 1e-4 relative error. Transmit apodization windows other than `none` and `scanline` are not implemented yet, so the PICMUS examples (tukey50 transmit window) still differ from MATLAB (envelope correlation about 0.99).
