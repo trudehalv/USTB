@@ -48,12 +48,16 @@ cf = postprocess.coherence_factor();
 cf.dimension = dimension.receive;
 
 
-invivo_b_das = das.go();
-cf.input = invivo_b_das;
+b_data_tx = das.go();
+cf.input = b_data_tx;
 invivo_b_cf = cf.go();
 invivo_b_cf.frame_rate = 100;
 
 % Save SVD-filtered DAS beamformed B-mode image
+das_rx = postprocess.coherent_compounding();
+das_rx.dimension = dimension.receive;
+das_rx.input = b_data_tx;
+invivo_b_das = das_rx.go();
 fig_das = figure('Visible', 'off');
 invivo_b_das.plot(fig_das, 'InVivo Rat Brain SVD-Filtered DAS', 60);
 exportgraphics(gca, [figure_path 'Beamformed_DAS_SVD_filtered.png']);
