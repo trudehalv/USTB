@@ -123,16 +123,10 @@ class TestBeamformedOutput:
         assert python_result["bf_data"].shape == matlab_ref["bf_real"].shape
 
     def test_should_match_matlab_per_pixel(self, matlab_ref, python_result, perm):
-        """Beamformed IQ data should match MATLAB pixel by pixel.
-
-        The pixels at depth 0 are excluded: they all sit at the probe origin,
-        where the Python scanline apodization (based on pixel azimuth angle)
-        assigns them all to the centre scanline, while MATLAB assigns them by
-        azimuth index. Everywhere else the two implementations agree.
-        """
+        """Beamformed IQ data should match MATLAB pixel by pixel, including the
+        depth-0 row at the origin (paired by azimuth index in match_pixels)."""
         ml_bf = (matlab_ref["bf_real"] + 1j * matlab_ref["bf_imag"])[perm]
-        depth = np.hypot(python_result["scan_x"], python_result["scan_z"])
         assert_pixelwise_match(
             ml_bf, python_result["bf_data"], "Verasonics P2-4 sector scan",
-            min_corr=0.99999, max_rel_err=1e-3, mask=depth > 1e-9,
+            min_corr=0.99999, max_rel_err=1e-3,
         )

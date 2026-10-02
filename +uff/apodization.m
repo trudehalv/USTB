@@ -210,10 +210,6 @@ classdef apodization < uff
                 case uff.window.tukey75
                     roll=0.75;
                     data=h.tukey(ratio_theta,roll).*h.tukey(ratio_phi,roll);
-                    % TUKEY80
-                case uff.window.tukey80
-                    roll=0.80;
-                    data=h.tukey(ratio_theta,roll).*h.tukey(ratio_phi,roll);
                     % TRIANGLE
                 case uff.window.triangle
                     data=h.triangle(ratio_theta).*h.triangle(ratio_phi);
