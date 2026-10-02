@@ -64,4 +64,4 @@ See the `examples/` directory:
 
 ## Relationship to MATLAB USTB
 
-This package mirrors the MATLAB USTB API as closely as possible. The main classes (`DAS`, `Dimension`, `Window`, `Apodization`) use the same names, properties, and method signatures. Beamformed output matches MATLAB with >0.999 correlation across all tested examples.
+This package mirrors the MATLAB USTB API as closely as possible. The main classes (`DAS`, `Dimension`, `Window`, `Apodization`) use the same names, properties, and method signatures. The integration tests compare against MATLAB pixel by pixel: the beamformed output of every example (CPWC linear, phased array, and the four PICMUS datasets) matches MATLAB to about 1e-4 relative error, and the receive, transmit and scanline apodization match `uff.apodization` to float precision.

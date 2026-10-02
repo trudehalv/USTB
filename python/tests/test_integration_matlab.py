@@ -9,6 +9,8 @@ import numpy as np
 import pytest
 import h5py
 
+from tests.matlab_compare import match_pixels, assert_pixelwise_match
+
 REFERENCE_FILE = os.path.join(os.path.dirname(__file__), "matlab_reference.h5")
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "data",
                          "Verasonics_P2-4_parasternal_long_small.uff")
@@ -77,6 +79,7 @@ def python_result(matlab_ref):
 
     return {
         "scan_x": scan.x.ravel(),
+        "scan_y": scan.y.ravel(),
         "scan_z": scan.z.ravel(),
         "transmit_delay": mid.transmit_delay,
         "receive_delay": mid.receive_delay,
@@ -84,77 +87,46 @@ def python_result(matlab_ref):
     }
 
 
-class TestScanCoordinates:
-    def test_should_have_same_range_x(self, matlab_ref, python_result):
-        """X coordinate ranges should match (ordering may differ due to meshgrid vs ndgrid)."""
-        ml_x = np.sort(matlab_ref["scan_x"])
-        py_x = np.sort(python_result["scan_x"])
-        np.testing.assert_allclose(ml_x, py_x, atol=1e-6,
-                                   err_msg="Scan x coordinate ranges differ")
+@pytest.fixture(scope="module")
+def perm(matlab_ref, python_result):
+    """MATLAB pixel index for each Python pixel (the two orderings differ)."""
+    return match_pixels(
+        (matlab_ref["scan_x"], matlab_ref["scan_y"], matlab_ref["scan_z"]),
+        (python_result["scan_x"], python_result["scan_y"], python_result["scan_z"]),
+    )
 
-    def test_should_have_same_range_z(self, matlab_ref, python_result):
-        """Z coordinate ranges should match."""
-        ml_z = np.sort(matlab_ref["scan_z"])
-        py_z = np.sort(python_result["scan_z"])
-        np.testing.assert_allclose(ml_z, py_z, atol=1e-6,
-                                   err_msg="Scan z coordinate ranges differ")
+
+class TestScanCoordinates:
+    def test_should_contain_the_same_pixel_positions(self, perm):
+        """Every Python pixel has a MATLAB pixel at the same position (checked in match_pixels)."""
+        assert len(np.unique(perm)) == len(perm)
 
 
 class TestReceiveDelay:
-    def test_should_have_same_delay_value_set(self, matlab_ref, python_result):
-        """Receive delay values should cover the same range (pixel ordering may differ)."""
-        py_sorted = np.sort(python_result["receive_delay"].ravel())
-        ml_sorted = np.sort(matlab_ref["receive_delay"].ravel())
+    def test_should_match_matlab_per_pixel(self, matlab_ref, python_result, perm):
         np.testing.assert_allclose(
-            py_sorted, ml_sorted, rtol=1e-4, atol=1e-8,
-            err_msg="Receive delay value sets differ"
+            python_result["receive_delay"], matlab_ref["receive_delay"][perm],
+            rtol=1e-5, atol=1e-10, err_msg="Receive delay differs from MATLAB",
         )
 
 
 class TestTransmitDelay:
-    def test_should_have_similar_nonzero_delay_statistics(self, matlab_ref, python_result):
-        """Non-zero transmit delay statistics should be similar."""
-        py_d = python_result["transmit_delay"].ravel()
-        ml_d = matlab_ref["transmit_delay"].ravel()
-        py_nz = py_d[np.abs(py_d) > 1e-8]
-        ml_nz = ml_d[np.abs(ml_d) > 1e-8]
-        assert len(py_nz) > 0 and len(ml_nz) > 0, "Should have non-zero delays"
-        np.testing.assert_allclose(np.mean(np.abs(py_nz)), np.mean(np.abs(ml_nz)),
-                                   rtol=0.1, err_msg="Mean abs transmit delay differs")
+    def test_should_match_matlab_per_pixel(self, matlab_ref, python_result, perm):
+        np.testing.assert_allclose(
+            python_result["transmit_delay"], matlab_ref["transmit_delay"][perm],
+            rtol=1e-5, atol=1e-10, err_msg="Transmit delay differs from MATLAB",
+        )
 
 
 class TestBeamformedOutput:
     def test_should_have_matching_shape(self, matlab_ref, python_result):
-        ml_shape = matlab_ref["bf_real"].shape
-        py_shape = python_result["bf_data"].shape
-        assert py_shape[0] == ml_shape[0], (
-            f"Pixel count mismatch: Python {py_shape[0]} vs MATLAB {ml_shape[0]}"
-        )
+        assert python_result["bf_data"].shape == matlab_ref["bf_real"].shape
 
-    def test_should_have_similar_dynamic_range(self, matlab_ref, python_result):
-        """Both outputs should span a similar dynamic range."""
-        ml_bf = matlab_ref["bf_real"] + 1j * matlab_ref["bf_imag"]
-        ml_env = np.abs(ml_bf).ravel()
-        py_env = np.abs(python_result["bf_data"]).ravel()
-
-        ml_dr = 20 * np.log10(ml_env.max() / (np.median(ml_env) + 1e-20))
-        py_dr = 20 * np.log10(py_env.max() / (np.median(py_env) + 1e-20))
-        assert abs(ml_dr - py_dr) < 15, (
-            f"Dynamic range differs: MATLAB {ml_dr:.1f} dB, Python {py_dr:.1f} dB"
-        )
-
-    def test_should_have_correlated_sorted_envelopes(self, matlab_ref, python_result):
-        """Sorted envelopes should be correlated (pixel ordering may differ
-        due to meshgrid vs ndgrid in sector scan)."""
-        ml_bf = matlab_ref["bf_real"] + 1j * matlab_ref["bf_imag"]
-        ml_env = np.sort(np.abs(ml_bf).ravel())
-        py_env = np.sort(np.abs(python_result["bf_data"]).ravel())
-
-        n = min(len(ml_env), len(py_env))
-        ml_env = ml_env[:n] / (ml_env.max() + 1e-20)
-        py_env = py_env[:n] / (py_env.max() + 1e-20)
-
-        correlation = np.corrcoef(ml_env, py_env)[0, 1]
-        assert correlation > 0.9, (
-            f"Sorted envelope correlation too low: {correlation:.4f}"
+    def test_should_match_matlab_per_pixel(self, matlab_ref, python_result, perm):
+        """Beamformed IQ data should match MATLAB pixel by pixel, including the
+        depth-0 row at the origin (paired by azimuth index in match_pixels)."""
+        ml_bf = (matlab_ref["bf_real"] + 1j * matlab_ref["bf_imag"])[perm]
+        assert_pixelwise_match(
+            ml_bf, python_result["bf_data"], "Verasonics P2-4 sector scan",
+            min_corr=0.99999, max_rel_err=1e-3,
         )

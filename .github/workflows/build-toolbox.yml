@@ -45,4 +45,7 @@ jobs:
           files: USTB_v${{ steps.version.outputs.version }}.mltbx
           name: USTB ${{ steps.version.outputs.version }}
           draft: false
+          # Tags with a suffix (e.g. v3.0.0-rc1) are published as pre-releases
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          make_latest: ${{ !contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true

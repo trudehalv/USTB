@@ -127,23 +127,25 @@ The Python API mirrors MATLAB as closely as possible:
 
 - **Pixel ordering**: MATLAB `sector_scan` uses Fortran-order (depth varies fastest), `pyuff_ustb` uses C-order (azimuth varies fastest). The beamformer handles both correctly; the difference only affects 2D reshape for display.
 - **Wavefront enum**: `pyuff_ustb.Wavefront` and `ustb.enums.Wavefront` are different types. The DAS code compares by `.value` to handle both.
-- **Apodization**: The Python scanline apodization is a simplified implementation. For production use, verify against MATLAB output.
+- **Apodization**: Receive, transmit (plane/diverging wave) and scanline (MLA) apodization are ports of `+uff/apodization.m` and match MATLAB to float precision (`tests/test_apodization_vs_matlab.py`). Where MATLAB windows give NaN (pixels at exactly zero depth), Python gives 0. Scanline apodization needs a scan with axes (`LinearScan` or `SectorScan`).
 
 #### Running Python tests
 
 ```bash
 cd python
 
-# Unit tests only (fast, no MATLAB or data needed)
-pytest tests/test_enums.py tests/test_apodization.py tests/test_beamformed_data.py tests/test_das.py
+# All tests (what CI runs); integration tests skip when reference files or datasets are missing
+pytest tests/
 
-# Integration tests (need MATLAB reference files in tests/*.h5 and datasets in data/)
-pytest tests/test_integration_matlab.py tests/test_examples_vs_matlab.py
+# Integration tests only (need MATLAB reference files in tests/*.h5 and datasets in data/).
+# They pair MATLAB and Python pixels by position and compare pixel by pixel.
+pytest tests/test_integration_matlab.py tests/test_examples_vs_matlab.py -s
 ```
 
 To regenerate MATLAB reference data:
 ```bash
 matlab -batch "addpath('.'); run('python/tests/generate_all_references.m');"
+matlab -batch "addpath('.'); run('python/tests/generate_apodization_reference.m');"
 ```
 
 #### Running Python examples
