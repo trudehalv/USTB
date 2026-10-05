@@ -1,19 +1,20 @@
 %% Step 1: Downloading and unpacking the dataset
-local_path = [ustb_path(),'/data/']; 
+local_path = fullfile(ustb_path(), 'data');
 base_url = 'https://zenodo.org/records/7883227/files/';
 
 %%
 % Downloading metadata param.mat
 param_url = [base_url 'param.mat?download=1'];
-param_file = [local_path 'param.mat'];
+param_file = fullfile(local_path, 'param.mat');
 if ~exist(param_file, 'file')
     fprintf("Downloading metadata param.mat...\n");
     websave(param_file, param_url);
 end
 
 % Downloading first 25 RF files
-RF_file = [local_path 'RF_001_to_025.zip'];
-if ~exist([local_path filesep 'RF'], 'dir')
+RF_file = fullfile(local_path, 'RF_001_to_025.zip');
+RF_dir = fullfile(local_path, 'RF');
+if ~exist(RF_dir, 'dir')
     if ~exist(RF_file, 'file')
         fprintf("Downloading in vivo rat brain data...\n");
         RF_url = [base_url 'RF_001_to_025.zip?download=1'];
@@ -29,8 +30,8 @@ fprintf("Done!\n");
 % We have 250 files, each containing 800 frames of RF data
 
 % Loading metadata
-load([local_path filesep 'param.mat']);
-N_chunks = 1; % N_chunks = 25
+param_file = fullfile(local_path, 'param.mat');
+load(param_file);
 
 % Create TX structure
 TX = struct( ...
@@ -71,26 +72,30 @@ device.Resource = struct( ...
 
 
 %% Step 3: Converting chunks
-% InVivoRatBrain.uff/
-%   /scan
-%   /1/channel_data
-%   /2/channel_data
-%   ...
-%   /20/channel_data
-% 
+% local_path/
+% ├── InVivoRatBrain_scan.uff          -> contains the 'scan' object at '/'
+% └── RF_channeldata/                  
+%     ├── InVivoRatBrain_001.uff       
+%     ├── InVivoRatBrain_002.uff       
+%     └── ...
+%     └── InVivoRatBrain_00N_chunks.uff
 
-uff_filename = [local_path filesep 'InVivoRatBrain.uff'];
-if exist(uff_filename, 'file')
-    delete(uff_filename);
+
+N_chunks = 2;
+
+RF_channeldata_path  = fullfile(local_path, 'RF_channeldata');
+
+if ~exist(RF_channeldata_path, 'dir')
+    mkdir(RF_channeldata_path);
 end
 
 for chunk_i = 1:N_chunks
     if N_chunks > 1
-
         tools.workbar(chunk_i / N_chunks, strjoin(["Loading chunks... [" chunk_i  "/" N_chunks "]"], ''));
     end
-    filename = strjoin(["RF_" num2str(chunk_i, '%03d') ".hdf5"], '');
-    data = h5read(fullfile([local_path filesep 'RF'], filename), '/rf/rf');
+    % Read hdf5-files
+    filename_hd5f = sprintf('RF_%03d.hdf5', chunk_i);
+    data = h5read(fullfile(local_path, 'RF', filename_hd5f), '/rf/rf');
     
     % Pass chunk to device and create channel data object
     device.RcvData = {data};
@@ -101,8 +106,9 @@ for chunk_i = 1:N_chunks
     ch_data.sampling_frequency = ch_data.sampling_frequency / 2; 
     ch_data.modulation_frequency = ch_data.sampling_frequency; 
 
-
-    uff.write_object(uff_filename, ch_data, 'channel_data', ['/' num2str(chunk_i)]);
+    % Write uff-files
+    filename_uff = sprintf('InVivoRatBrain_%03d.uff', chunk_i);
+    uff.write_object(fullfile(RF_channeldata_path, filename_uff), ch_data, 'channel_data', '/');
 end
 
 tools.workbar(1);
@@ -119,8 +125,10 @@ scan_obj = uff.linear_scan();
 scan_obj.x_axis = lmb_x * ch_data.lambda; 
 scan_obj.z_axis = lmb_z * ch_data.lambda;
 
-% Write scan grid to the root of the UFF file
-uff.write_object(uff_filename, scan_obj, 'scan', '/');
-
+% Write scan grid to separate uff-file
+scan_filename = fullfile(local_path, 'InVivoRatBrain_scan.uff');
+uff.write_object(scan_filename, scan_obj, 'scan', '/');
 fprintf('Successfully saved Rat Brain UFF file');
+
+
 
