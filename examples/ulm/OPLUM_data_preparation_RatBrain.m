@@ -115,7 +115,7 @@ tools.workbar(1);
 disp("Done!")
 
 
-%% Step 5: Construct a linear scan
+%% Step 4: Construct a linear scan
 % Recreate the spatial axes exactly as defined in the in vivo sequence
 % Spatial axes in wavelengths
 lmb_x = PixelData.Origin(1) + (0:PixelData.Size(2)-1).' .* PixelData.PDelta(1);
@@ -129,6 +129,18 @@ scan_obj.z_axis = lmb_z * ch_data.lambda;
 scan_filename = fullfile(local_path, 'InVivoRatBrain_scan.uff');
 uff.write_object(scan_filename, scan_obj, 'scan', '/');
 fprintf('Successfully saved Rat Brain UFF file');
+
+
+%% Step 5: Clean up
+% After creating the uff files, raw RF files and metadata can be deleted. 
+
+% % Delete downloaded metadata
+% delete(param_file);
+% % Delete downloaded InVivo Rat Brain RF data
+% rmdir(RF_dir, 's');
+
+clearvars;
+fprintf("Finished prepearing In Vivo Rat Brain data from OPULM.\n");
 
 
 
