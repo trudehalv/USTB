@@ -29,7 +29,9 @@ invivo_scan = tools.scan_integer_upscale(invivo_scan, 2);
 
 % Preprocess SVD-filter
 svd = preprocess.svd_filter();
-svd.cutoff = 2;
+svd.cutoff = 5;
+svd.input = invivo_ch_data;
+svd_ch_data_all = svd.go();
 
 % DAS
 das = midprocess.das();
@@ -50,29 +52,30 @@ cf.dimension = dimension.receive;
 beamformed_path_CF = fullfile(local_path, 'beamformed_RatBrain_CF_001.uff');
 %beamformed_path_DAS = fullfile(local_path, 'beamformed_RatBrain_DAS_001.uff');
 
-raw_frames = invivo_ch_data.data;
+%raw_frames = invivo_ch_data.data;
 total_frames = size(invivo_ch_data.data, 4);
 batch_size = 40;
+
 
 for start_frame = 1:batch_size:total_frames
     end_frame = min(start_frame + batch_size - 1, total_frames);
     fprintf('Processing frames %d to %d of %d...\n', start_frame, end_frame, total_frames);
-
+    
     % Slice current batch of frames
-    invivo_ch_data.data = raw_frames(:,:,:, start_frame:end_frame);
-  
+    frame_idx = start_frame:end_frame;
+
     % SVD
-    svd.input = invivo_ch_data;
-    svd_ch_data = svd.go();
+    svd_ch_data_batch = uff.channel_data(svd_ch_data_all);
+    svd_ch_data_batch.data = svd_ch_data_all.data(:,:,:,frame_idx);
 
     % DAS
-    das.channel_data = svd_ch_data;
+    das.channel_data = svd_ch_data_batch;
     b_data_tx = das.go();
 
     % CF
     cf.input = b_data_tx;
     invivo_b_cf = cf.go();
-    invivo_b_cf.frame_rate = 100;
+    invivo_b_cf.frame_rate = 1000; 
 
     % Coherent compounding (ADD)
     % das_rx.input = b_data_tx;
@@ -123,7 +126,7 @@ u.framerate = 500;
 % The full-width half-maximum (fwhm) parameter tunes the kernel sizes of
 % initial particle position guesses, and is configured in number of pixels.
 % For this case, the fwhm is estimated to be 3x3 (width, height) pixels.
-u.fwhm = [3 3];
+u.fwhm = [5 5];
 
 % The numberOfParticles parameter sets the upper limit for how many
 % particles the ULM process tries to localize. If more than this number is
@@ -191,7 +194,7 @@ exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain.png'));
 % As is visible, the image is quite choppy, and the tracks are pixelated.
 % This is because the tracking algorithm only used the particle positions
 % at every "full frame". This is especially visable for fast moving 
-% particles, as large gaps are formed as the particle moves multiple pixels
+% particles, as large gaps are formed as the particle moves multiple pixel
 % between frames. No interpolation, no smooth paths.
 % Changing the tracking algorithm to use velocity_interpolation instead
 % yields a much better image.
@@ -212,4 +215,6 @@ fprintf('\nSaved output images to:\n - %s\n - %s\n - %s\n - %s\n - %s\n', ...
     [figure_path 'Beamformed_CF_SVD_filtered_MIP.png'], ...
     [figure_path 'ULM_InVivo_Rat_Brain.png'], ...
     [figure_path 'ULM_InVivo_Rat_Brain_interpolated.png']);
+
+
 
