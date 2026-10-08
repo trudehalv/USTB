@@ -1,20 +1,21 @@
 %% Step 1: Data Loading
 % Start by loading the first chunk of channel data and the uff scan object 
-data_path = [ustb_path(),'/data/']; 
-figure_path = [ustb_path(),'/examples/ulm/Figure/'];
+local_path = fullfile(ustb_path(), 'data');
+RF_channeldata_path  = fullfile(local_path, 'RF_channeldata');
+
+% Creating file for generated figures
+figure_path = fullfile(ustb_path(), 'examples', 'ulm', 'Figures');
 if ~exist(figure_path, 'dir')
     mkdir(figure_path);
 end
 
-invivo_ch_data = uff.read_object([data_path filesep 'InVivoRatBrain.uff'], '/1/channel_data');
-invivo_scan = uff.read_object([data_path filesep 'InVivoRatBrain.uff'], '/scan');
-
-% Use only the first xx frames
-invivo_ch_data.data = invivo_ch_data.data(:,:,:,1:40);
+invivo_ch_data = uff.read_object(fullfile(RF_channeldata_path, 'InVivoRatBrain_001.uff'), '/channel_data');
+invivo_scan = uff.read_object(fullfile(local_path, 'InVivoRatBrain_scan.uff'), '/scan');
 
 fprintf("\nInVivo Data:\nSamples: %d\nReceive: %d\nTransmits: %d\nFrames: %d\n", deal(size(invivo_ch_data.data)));
 
-%% Step 2: Beamforming
+
+%% Step 2: Set up Beamforming 
 % For this example, the beamforming step uses DAS only on transmit and
 % combines the receive with the coherence-factor beamformer. The parameters
 % used follows the tuned parameter case for lambda/2 sampling from Simon A.
@@ -26,57 +27,84 @@ fprintf("\nInVivo Data:\nSamples: %d\nReceive: %d\nTransmits: %d\nFrames: %d\n",
 % A convinience script for this was added to the +tools module
 invivo_scan = tools.scan_integer_upscale(invivo_scan, 2);
 
-%%
 % Preprocess SVD-filter
 svd = preprocess.svd_filter();
+svd.cutoff = 5;
 svd.input = invivo_ch_data;
-svd.cutoff = 2;
-svd_ch_data = svd.go();
+svd_ch_data_all = svd.go();
 
-%%
-% The DAS-midprocess is configured as follows ...
+% DAS
 das = midprocess.das();
 das.dimension = dimension.transmit;
-%das.channel_data = invivo_ch_data;
-das.channel_data = svd_ch_data; % With SVD filtering
 das.scan = invivo_scan;
-das.receive_apodization.f_number = 0.8; 
+das.receive_apodization.f_number = 1.5; 
 das.receive_apodization.window = uff.window.hamming;
 
-% ... and the coherence factor ...
+% CF
 cf = postprocess.coherence_factor();
 cf.dimension = dimension.receive;
 
+% Coherent Compounding (ADD)
+% das_rx = postprocess.coherent_compounding();
+% das_rx.dimension = dimension.receive;
 
-b_data_tx = das.go();
-cf.input = b_data_tx;
-invivo_b_cf = cf.go();
-invivo_b_cf.frame_rate = 100;
+%% Step 3: Beamforming batches
+beamformed_path_CF = fullfile(local_path, 'beamformed_RatBrain_CF_001.uff');
+%beamformed_path_DAS = fullfile(local_path, 'beamformed_RatBrain_DAS_001.uff');
 
-% Save SVD-filtered DAS beamformed B-mode image
-das_rx = postprocess.coherent_compounding();
-das_rx.dimension = dimension.receive;
-das_rx.input = b_data_tx;
-invivo_b_das = das_rx.go();
-fig_das = figure('Visible', 'off');
-invivo_b_das.plot(fig_das, 'InVivo Rat Brain SVD-Filtered DAS', 60);
-exportgraphics(gca, [figure_path 'Beamformed_DAS_SVD_filtered.png']);
-
-% Save SVD-filtered Coherence Factor (CF) beamformed image
-fig_cf = figure('Visible', 'off');
-invivo_b_cf.plot(fig_cf, 'InVivo Rat Brain SVD-Filtered CF', 60);
-exportgraphics(gca, [figure_path 'Beamformed_CF_SVD_filtered.png']);
-
-% Save Maximum Intensity Projection (MIP) of SVD-filtered CF over all 40 frames
-fig_mip = figure('Visible', 'off');
-mip_data = uff.beamformed_data(invivo_b_cf);
-mip_data.data = max(abs(invivo_b_cf.data), [], 4);
-mip_data.plot(fig_mip, 'InVivo Rat Brain SVD-Filtered CF (MIP over 40 frames)', 60);
-exportgraphics(gca, [figure_path 'Beamformed_CF_SVD_filtered_MIP.png']);
+%raw_frames = invivo_ch_data.data;
+total_frames = size(invivo_ch_data.data, 4);
+batch_size = 40;
 
 
+for start_frame = 1:batch_size:total_frames
+    end_frame = min(start_frame + batch_size - 1, total_frames);
+    fprintf('Processing frames %d to %d of %d...\n', start_frame, end_frame, total_frames);
+    
+    % Slice current batch of frames
+    frame_idx = start_frame:end_frame;
 
-%% Step 3: The actual ULM part
+    % SVD
+    svd_ch_data_batch = uff.channel_data(svd_ch_data_all);
+    svd_ch_data_batch.data = svd_ch_data_all.data(:,:,:,frame_idx);
+
+    % DAS
+    das.channel_data = svd_ch_data_batch;
+    b_data_tx = das.go();
+
+    % CF
+    cf.input = b_data_tx;
+    invivo_b_cf = cf.go();
+    invivo_b_cf.frame_rate = 1000; 
+
+    % Coherent compounding (ADD)
+    % das_rx.input = b_data_tx;
+    % invivo_b_das = das_rx.go();
+
+    if start_frame == 1
+        invivo_b_cf_full = invivo_b_cf;
+        %invivo_b_das_full = invivo_b_das;
+    else
+        invivo_b_cf_full.data = cat(4, invivo_b_cf_full.data, invivo_b_cf.data);
+        %invivo_b_das_full.data = cat(4, invivo_b_das_full.data, invivo_b_das.data);
+    end
+
+    clear svd_ch_data b_data_tx invivo_b_cf;
+
+end
+
+uff.write_object(beamformed_path_CF, invivo_b_cf_full, 'b_data');
+% uff.write_object(beamformed_path_das, invivo_b_das_full, 'b_data');
+
+
+%% Visualization
+% CF
+figure;
+invivo_b_cf_full.plot([], 'InVivo Rat Brain SVD CF', 60);
+
+% Coherent Compounding (ADD)
+
+%% Step 4: The actual ULM part
 % With some data beamformed and configured, this step walks through a basic
 % configurationg of a ULM pipeline.
 % The basis for all pipelines is the ULM handle object. This creature
@@ -98,7 +126,7 @@ u.framerate = 500;
 % The full-width half-maximum (fwhm) parameter tunes the kernel sizes of
 % initial particle position guesses, and is configured in number of pixels.
 % For this case, the fwhm is estimated to be 3x3 (width, height) pixels.
-u.fwhm = [3 3];
+u.fwhm = [5 5];
 
 % The numberOfParticles parameter sets the upper limit for how many
 % particles the ULM process tries to localize. If more than this number is
@@ -139,12 +167,11 @@ u.tracking = ulm.tracking.tracks;
 % Lastly, the data from the previous step is supplied. Lambda must be
 % supplied separately, as beamformed_data has no lambda property.
 u.lambda = invivo_ch_data.lambda;
-u.input = invivo_b_cf;
+u.input = invivo_b_cf_full;
 u.scan = invivo_scan;
 
 % Then simply execute the ULM process
 tracks = u.go();
-
 
 %% Step 5a: ULM Image construction
 % ULM is no fun without images.
@@ -160,14 +187,14 @@ imagesc(invivo_scan.x_axis * 1e3, invivo_scan.z_axis * 1e3, ulm_img);
 xlabel("X [mm]");ylabel("z [mm]");
 title('ULM InVivo Rat Brain')
 colormap turbo;
-exportgraphics(gca, [figure_path 'ULM_InVivo_Rat_Brain.png']);
+exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain.png'));
 
 
 %% Step 5b: ULM Image Construction with interpolation
 % As is visible, the image is quite choppy, and the tracks are pixelated.
 % This is because the tracking algorithm only used the particle positions
 % at every "full frame". This is especially visable for fast moving 
-% particles, as large gaps are formed as the particle moves multiple pixels
+% particles, as large gaps are formed as the particle moves multiple pixel
 % between frames. No interpolation, no smooth paths.
 % Changing the tracking algorithm to use velocity_interpolation instead
 % yields a much better image.
@@ -179,10 +206,15 @@ imagesc(invivo_scan.x_axis * 1e3, invivo_scan.z_axis * 1e3, ulm_img);
 xlabel("X [mm]");ylabel("z [mm]");
 title('ULM InVivo Rat Brain with interpolation')
 colormap turbo;
-exportgraphics(gca, [figure_path 'ULM_InVivo_Rat_Brain_interpolated.png']);
+exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_interpolated.png'));
+
+
 fprintf('\nSaved output images to:\n - %s\n - %s\n - %s\n - %s\n - %s\n', ...
     [figure_path 'Beamformed_DAS_SVD_filtered.png'], ...
     [figure_path 'Beamformed_CF_SVD_filtered.png'], ...
     [figure_path 'Beamformed_CF_SVD_filtered_MIP.png'], ...
     [figure_path 'ULM_InVivo_Rat_Brain.png'], ...
     [figure_path 'ULM_InVivo_Rat_Brain_interpolated.png']);
+
+
+
