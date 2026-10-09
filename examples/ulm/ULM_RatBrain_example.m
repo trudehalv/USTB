@@ -3,6 +3,10 @@
 local_path = fullfile(ustb_path(), 'data');
 RF_channeldata_path  = fullfile(local_path, 'RF_channeldata');
 
+% Beamformed folders
+beamformed_path_CF = fullfile(local_path, 'beamformed_RatBrain_CF_001.uff');
+%beamformed_path_DAS = fullfile(local_path, 'beamformed_RatBrain_DAS_001.uff');
+
 % Creating file for generated figures
 figure_path = fullfile(ustb_path(), 'examples', 'ulm', 'Figures');
 if ~exist(figure_path, 'dir')
@@ -49,13 +53,9 @@ cf.dimension = dimension.receive;
 % das_rx.dimension = dimension.receive;
 
 %% Step 3: Beamforming batches
-beamformed_path_CF = fullfile(local_path, 'beamformed_RatBrain_CF_001.uff');
-%beamformed_path_DAS = fullfile(local_path, 'beamformed_RatBrain_DAS_001.uff');
-
-%raw_frames = invivo_ch_data.data;
 total_frames = size(invivo_ch_data.data, 4);
 batch_size = 40;
-
+frame_rate = 1000;
 
 for start_frame = 1:batch_size:total_frames
     end_frame = min(start_frame + batch_size - 1, total_frames);
@@ -65,44 +65,56 @@ for start_frame = 1:batch_size:total_frames
     frame_idx = start_frame:end_frame;
 
     % SVD
-    svd_ch_data_batch = uff.channel_data(svd_ch_data_all);
+    svd_ch_data_batch = uff.channel_data(svd_ch_data_all); 
     svd_ch_data_batch.data = svd_ch_data_all.data(:,:,:,frame_idx);
 
     % DAS
     das.channel_data = svd_ch_data_batch;
-    b_data_tx = das.go();
+    b_tx_batch = das.go();
 
     % CF
-    cf.input = b_data_tx;
-    invivo_b_cf = cf.go();
-    invivo_b_cf.frame_rate = 1000; 
+    cf.input = b_tx_batch;
+    b_CF_batch = cf.go();
+    b_CF_batch.frame_rate = frame_rate; 
 
     % Coherent compounding (ADD)
     % das_rx.input = b_data_tx;
     % invivo_b_das = das_rx.go();
 
     if start_frame == 1
-        invivo_b_cf_full = invivo_b_cf;
+        b_CF_file = b_CF_batch;
         %invivo_b_das_full = invivo_b_das;
     else
-        invivo_b_cf_full.data = cat(4, invivo_b_cf_full.data, invivo_b_cf.data);
+        b_CF_file.data = cat(4, b_CF_file.data, b_CF_batch.data);
         %invivo_b_das_full.data = cat(4, invivo_b_das_full.data, invivo_b_das.data);
     end
 
-    clear svd_ch_data b_data_tx invivo_b_cf;
+    clear svd_ch_data_batch b_tx_batch b_CF_batch;
 
 end
 
-uff.write_object(beamformed_path_CF, invivo_b_cf_full, 'b_data');
+uff.write_object(beamformed_path_CF, b_CF_file, 'b_data');
 % uff.write_object(beamformed_path_das, invivo_b_das_full, 'b_data');
 
 
-%% Visualization
-% CF
-figure;
-invivo_b_cf_full.plot([], 'InVivo Rat Brain SVD CF', 60);
+%% Saving B-mode images
+% Save SVD filtered Coherence factor beamformed B-mode image
+fig_CF = figure('Visible','off');
+b_CF_file.plot(fig_CF, 'In Vivo Rat Brain SVD-filtered CF', 60);
+exportgraphics(gca, fullfile(figure_path, 'Beamformed_CF_SVD.png'));
 
-% Coherent Compounding (ADD)
+% % Save SVD filtered DAS beamformed B-mode image
+% fig_DAS = figure('Visible','off');
+% b_DAS_file.plot(fig_DAS, 'In Vivo Rat Brain SVD-filtered DAS', 60);
+% exportgraphics(gca, fullfile(figure_path, 'Beamformed_DAS_sliding_SVD_5.png'));
+% 
+% % Save Maximum Intensity Projection (MIP) of SVD-filtered CF over all 40 frames
+% fig_mip = figure('Visible', 'off');
+% mip_data = uff.beamformed_data(invivo_b_CF_full);
+% mip_data.data = max(abs(invivo_b_CF_full.data), [], 4);
+% mip_data.plot(fig_mip, 'InVivo Rat Brain SVD-Filtered CF (MIP over 40 frames)', 60);
+% exportgraphics(gca, fullfile(figure_path, 'Beamformed_CF_SVD_filtered_MIP.png'));
+
 
 %% Step 4: The actual ULM part
 % With some data beamformed and configured, this step walks through a basic
@@ -167,7 +179,7 @@ u.tracking = ulm.tracking.tracks;
 % Lastly, the data from the previous step is supplied. Lambda must be
 % supplied separately, as beamformed_data has no lambda property.
 u.lambda = invivo_ch_data.lambda;
-u.input = invivo_b_cf_full;
+u.input = b_CF_file;
 u.scan = invivo_scan;
 
 % Then simply execute the ULM process
