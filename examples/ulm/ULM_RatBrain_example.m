@@ -58,6 +58,7 @@ das_rx = postprocess.coherent_compounding();
 das_rx.dimension = dimension.receive;
 das_rx.input = b_data_tx;
 invivo_b_das = das_rx.go();
+
 fig_das = figure('Visible', 'off');
 invivo_b_das.plot(fig_das, 'InVivo Rat Brain SVD-Filtered DAS', 60);
 exportgraphics(gca, [figure_path 'Beamformed_DAS_SVD_filtered.png']);

@@ -33,11 +33,13 @@
 % doi:10.1038/s41551-021-00824-8 (see +ulm/README.md).
 
 clear all; close all;
+%data_folder = 'D:/data/OpenH-RF/ulmshare/mouse_16_acquisition_1';
+%track_folder = fullfile(data_folder, 'tracks');
+%buffers = 50:149;
 
-data_folder = 'D:/data/OpenH-RF/ulmshare/mouse_16_acquisition_1';
+data_folder = fullfile(ustb_path(), '/sandbox/OpenHRF/Data/OpenH-RF/ulmshare/mouse_16_acquisition_1' );
 track_folder = fullfile(data_folder, 'tracks');
-buffers = 50:149;
-
+buffers = 50;
 %% Processing parameters
 % Beamforming grid of the ULMShare reference processing
 x_axis = (-5e-3:25e-6:5e-3-25e-6).';
@@ -72,23 +74,96 @@ for n_buffer = buffers
     end
     t_buffer = tic;
 
-    % 1. Convert and beamform
+    % 1. Convert 
     channel_data = openhrf_to_uff(buffer_file);
+
+    % 2. SVD clutter filter
+    svd = preprocess.svd_filter();
+    svd.input = channel_data;
+    svd.cutoff = 20; % ?? 
+    svd_channel_data = svd.go();
+
+    % Beamform
     das = midprocess.das();
     das.channel_data = channel_data;
     das.scan = scan;
-    das.dimension = dimension.both;
-    das.code = code.mex_gpu;
+    das.dimension = dimension.transmit;
+    % das.code = code.mex_gpu;
+    das.code = code.mex;
     das.receive_apodization.window = uff.window.hanning;
     das.receive_apodization.f_number = f_number;
-    b_data = das.go();
-    iq = reshape(double(b_data.data), scan.N_z_axis, scan.N_x_axis, []);
+
+    % Coherence factor over receive aperture
+    cf = postprocess.coherence_factor();
+    cf.dimension = dimension.receive;
+    
+    % % Ordinary coherent receive compounding
+    % das_rx = postprocess.coherent_compounding();
+    % das_rx.dimension = dimension.receive;
+
+    batch_size = 10;
+    n_frames = size(channel_data.data, 4);
+    % These are assigned on the first iteration, once output dimensions are known
+    b_data_cf_all = [];
+    %b_data_das_all = [];
+    for first_frame = 1:batch_size:n_frames
+    
+        frame_idx = first_frame:min(first_frame + batch_size - 1, n_frames);
+    
+        % Make a channel-data object containing only this frame batch.
+        % Metadata are copied; only the data array is sliced.
+        channel_batch = uff.channel_data(svd_channel_data);
+        channel_batch.data = svd_channel_data.data(:, :, :, frame_idx);
+    
+        % Beamform, retaining the receive dimension
+        das.channel_data = channel_batch;
+        b_data_tx = das.go();
+    
+        % Branch A: coherence-factor processing
+        cf.input = b_data_tx;
+        b_data_cf_batch = cf.go();
+    
+        % % Branch B: ordinary coherent receive summation
+        % das_rx.input = b_data_tx;
+        % b_data_das_batch = das_rx.go();
+            % Store only the compact final images, not b_data_tx.
+        % This is important for memory use.
+        if isempty(b_data_cf_all)
+            b_data_cf_all = uff.beamformed_data(b_data_cf_batch);
+            %b_data_das_all = uff.beamformed_data(b_data_das_batch);
+    
+            b_data_cf_all.data = zeros( ...
+                [size(b_data_cf_batch.data, 1), ...
+                 size(b_data_cf_batch.data, 2), ...
+                 size(b_data_cf_batch.data, 3), ...
+                 n_frames], ...
+                'like', b_data_cf_batch.data);
+    
+            % b_data_das_all.data = zeros( ...
+            %     [size(b_data_das_batch.data, 1), ...
+            %      size(b_data_das_batch.data, 2), ...
+            %      size(b_data_das_batch.data, 3), ...
+            %      n_frames], ...
+            %     'like', b_data_das_batch.data);
+        end
+        % Insert this batch at its original frame positions
+        b_data_cf_all.data(:,:, :, frame_idx) = b_data_cf_batch.data;
+        %b_data_das_all.data(:, :,:, frame_idx) = b_data_das_batch.data;
+    
+        % Free the large receive-resolved beamformed data before next batch
+        clear channel_batch b_data_tx b_data_cf_batch 
+        %clear b_data_das_batch
+    end
+
+    
+    iq = reshape(double(b_data_cf_all.data), scan.N_z_axis, scan.N_x_axis, []);
 
     % 2. SVD clutter filter (as svdClutterFilter in the ULMShare code)
-    iq = svd_clutter_filter(iq, clutter_filter_cut);
+    %iq = svd_clutter_filter(iq, clutter_filter_cut);
 
     % 3. Lag-1 autocorrelation signal enhancement
-    window = hanning(lag1_window);
+    % window = hanning(lag1_window);
+    window = hann(lag1_window);
     window = reshape(window./sum(window), 1, 1, []);
     enhanced = sqrt(abs(convn(iq(:, :, 1:end-1).*conj(iq(:, :, 2:end)), window, 'same')));
 
@@ -119,7 +194,7 @@ for n_buffer = buffers
     u.tracking = ulm.tracking.velocity_interpolation;
     u.input = b_ulm;
     u.scan = scan;
-    tracks = u.go(); %#ok<NASGU>   % {[z x vz vx t]} in m, m/s, s
+    tracks = u.go();  % {[z x vz vx t]} in m, m/s, s
 
     lambda = channel_data.lambda;
     save(track_file, 'tracks', 'lambda');
