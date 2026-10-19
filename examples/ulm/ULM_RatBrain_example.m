@@ -73,9 +73,8 @@ das_rx = postprocess.coherent_compounding();
 das_rx.dimension = dimension.receive;
 
 %% Step 3: Beamforming batches
-%total_frames = size(invivo_ch_data.data, 4);
 batch_size = 20;
-frame_rate = 1000; % Must be consistent with framerate in ULM?
+frame_rate = 1000; 
 
 for file = 1:nFiles
     invivo_ch_data = uff.read_object(uffFiles{file}, '/channel_data');
@@ -125,39 +124,21 @@ for file = 1:nFiles
     clear b_CF_file b_DAS_file invivo_ch_data svd_ch_data_all
 end
 
-%% Combining beamformed uff-files
-files_CF = dir(fullfile(beamformed_path_CF, '*uff'));
-files_DAS = dir(fullfile(beamformed_path_DAS, '*uff'));
-
-for i = 1:nFiles
-    filename_CF = sprintf('beamformed_CF_%03d.uff', i);
-    filename_DAS = sprintf('beamformed_DAS_%03d.uff', i);
-    b_data_part_CF = uff.read_object(fullfile(beamformed_path_CF, filename_CF), '/b_data');
-    b_data_part_DAS = uff.read_object(fullfile(beamformed_path_DAS, filename_DAS), '/b_data');
-    
-    if i==1
-        b_data_all_CF = b_data_part_CF;
-        b_data_all_DAS = b_data_part_DAS;
-    else
-        b_data_all_CF.data = cat(4, b_data_all_CF.data, b_data_part_CF.data);
-        b_data_all_DAS.data = cat(4, b_data_all_DAS.data, b_data_part_DAS.data);
-    end
-    clear b_data_part_CF b_data_part_DAS
-end
-
 
 %% Saving B-mode images
 % Save SVD filtered Coherence factor beamformed B-mode image
-b_mode_CF = uff.beamformed_data(b_data_all_CF);
-b_mode_CF.data = b_data_all_CF.data(:, :, :, 1);
+b_data_CF = uff.read_object(fullfile(beamformed_path_CF, "beamformed_CF_001.uff"), '/b_data');
+b_mode_CF = uff.beamformed_data(b_data_CF);
+b_mode_CF.data = b_data_CF.data(:, :, :, 1);
 
 fig_CF = figure('Visible','off');
 b_mode_CF.plot(fig_CF, 'In Vivo Rat Brain SVD-filtered CF', 60);
 exportgraphics(gca, fullfile(figure_path, 'Beamformed_CF_SVD.png'));
 
 % Save SVD filtered DAS beamformed B-mode image
-b_mode_DAS = uff.beamformed_data(b_data_all_DAS);
-b_mode_DAS.data = b_data_all_DAS.data(:, :, :, 1);
+b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, "beamformed_DAS_001.uff"), '/b_data');
+b_mode_DAS = uff.beamformed_data(b_data_DAS);
+b_mode_DAS.data = b_data_DAS.data(:, :, :, 1);
 
 fig_DAS = figure('Visible','off');
 b_mode_DAS.plot(fig_DAS, 'In Vivo Rat Brain SVD-filtered DAS', 60);
@@ -237,15 +218,25 @@ u.tracking = ulm.tracking.tracks;
 % Lastly, the data from the previous step is supplied. Lambda must be
 % supplied separately, as beamformed_data has no lambda property.
 u.lambda = lambda;
-u.scan = invivo_scan;
 
-% Coherence factor
-u.input = b_data_all_CF;
-tracks_CF = ulm_per_buffer(u, b_data_all_CF, total_frames);
+% Loop through the beamformed files
+CF_files = dir(fullfile(beamformed_path_CF, 'beamformed_CF_*.uff'));
+DAS_files = dir(fullfile(beamformed_path_DAS, 'beamformed_DAS_*.uff'));
 
-% Coherent compouding
-u.input = b_data_all_DAS;
-tracks_DAS = ulm_per_buffer(u, b_data_all_DAS, total_frames);
+tracks_CF = {};
+tracks_DAS = {};
+
+for i = 1:length(CF_files)
+    b_data_CF = uff.read_object(fullfile(beamformed_path_CF, CF_files(i).name), '/b_data');
+    file_tracks_CF = ulm_per_buffer(u, b_data_CF);
+    tracks_CF = [tracks_CF; file_tracks_CF(:)];
+    clear b_data_CF;
+
+    b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, DAS_files(i).name), '/b_data');
+    file_tracks_DAS = ulm_per_buffer(u, b_data_DAS);
+    tracks_DAS = [tracks_DAS; file_tracks_DAS(:)];
+    clear b_data_DAS;
+end
 
 %% Step 5a: ULM Image construction
 % ULM is no fun without images.
@@ -262,7 +253,7 @@ imagesc(invivo_scan.x_axis * 1e3, invivo_scan.z_axis * 1e3, ulm_img);
 xlabel("X [mm]");ylabel("z [mm]");
 title('ULM InVivo Rat Brain - CF')
 colormap turbo;
-exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_CF.png'));
+exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_CF_separate.png'));
 
 % DAS
 ulm_img = u.create_image(tracks_DAS, "tracks");
@@ -271,7 +262,7 @@ imagesc(invivo_scan.x_axis * 1e3, invivo_scan.z_axis * 1e3, ulm_img);
 xlabel("X [mm]");ylabel("z [mm]");
 title('ULM InVivo Rat Brain - DAS')
 colormap turbo;
-exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_DAS.png'));
+exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_DAS_separate.png'));
 
 
 %% Step 5b: ULM Image Construction with interpolation
@@ -285,13 +276,21 @@ exportgraphics(gca, fullfile(figure_path, 'ULM_InVivo_Rat_Brain_DAS.png'));
 
 u.tracking = ulm.tracking.velocity_interpolation;
 
-% Coherence factor
-u.input = b_data_all_CF;
-tracks_CF = ulm_per_buffer(u, b_data_all_CF, total_frames);
+tracks_CF = {};
+tracks_DAS = {};
 
-% Coherent compouding
-u.input = b_data_all_DAS;
-tracks_DAS = ulm_per_buffer(u, b_data_all_DAS, total_frames);
+for i = 1:length(CF_files)
+    b_data_CF = uff.read_object(fullfile(beamformed_path_CF, CF_files(i).name), '/b_data');
+    file_tracks_CF = ulm_per_buffer(u, b_data_CF);
+    tracks_CF = [tracks_CF; file_tracks_CF(:)];
+    clear b_data_CF;
+
+    b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, DAS_files(i).name), '/b_data');
+    file_tracks_DAS = ulm_per_buffer(u, b_data_DAS);
+    tracks_DAS = [tracks_DAS; file_tracks_DAS(:)];
+    clear b_data_DAS;
+end
+
 
 % CF
 ulm_img = u.create_image(tracks_CF, "tracks");
@@ -324,7 +323,7 @@ fprintf('\nSaved output images to:\n - %s\n - %s\n - %s\n - %s\n - %s\n - %s\n -
 
 
 %% Local functions
-function tracks = ulm_per_buffer(u, b_data, frames_per_buffer)
+function tracks = ulm_per_buffer(u, b_data)
 % Runs ULM on one buffer at a time, so tracks are not linked across the
 % separate acquisitions. ULM keeps the numberOfParticles brightest maxima in
 % each frame, so each pixel is first divided by its RMS over time, smoothed
@@ -335,16 +334,18 @@ function tracks = ulm_per_buffer(u, b_data, frames_per_buffer)
 % Table 3). ULMShare divides the data before the SVD filter by it and runs
 % the SVD again; here the envelope is divided directly.
 scan = b_data.scan;
-tracks = {};
-for start_frame = 1:frames_per_buffer:size(b_data.data, 4)
-    env = abs(b_data.data(:, :, :, start_frame:start_frame + frames_per_buffer - 1));
-    env = reshape(env, scan.N_z_axis, scan.N_x_axis, []);
-    env = env./imgaussfilt(sqrt(mean(env.^2, 3)), 9);
-    b_buffer = uff.beamformed_data();
-    b_buffer.scan = scan;
-    b_buffer.data = reshape(env, scan.N_pixels, 1, 1, []);
-    u.input = b_buffer;
-    buffer_tracks = u.go();
-    tracks = [tracks; buffer_tracks(:)]; %#ok<AGROW>
+
+env = abs(b_data.data);
+env = reshape(env, scan.N_z_axis, scan.N_x_axis, []);
+env = env./imgaussfilt(sqrt(mean(env.^2, 3)), 9);
+b_buffer = uff.beamformed_data();
+b_buffer.scan = scan;
+b_buffer.data = reshape(env, scan.N_pixels, 1, 1, []);
+
+u.input = b_buffer;
+u.scan = scan;
+tracks = u.go();
+tracks = tracks(:);
+
 end
-end
+
