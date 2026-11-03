@@ -1,0 +1,339 @@
+clear all; close all;
+local_path = fullfile(ustb_path(),'/sandbox/OpenHRF/Data/OpenH-RF/ulmshare/mouse_16_acquisition_1/');
+RF_channeldata_path = fullfile(local_path, 'RF_channeldata');
+
+% Beamformed folders
+beamformed_path_CF = fullfile(local_path, 'beamformed_ULMShare_CF');
+if ~exist(beamformed_path_CF, 'dir')
+    mkdir(beamformed_path_CF);
+end
+
+beamformed_path_DAS = fullfile(local_path, 'beamformed_ULMShare_DAS');
+if ~exist(beamformed_path_DAS, 'dir')
+    mkdir(beamformed_path_DAS);
+end
+
+% Creating file for generated figures
+figure_path = fullfile(ustb_path(), 'sandbox', 'OpenHRF', 'Figures');
+if ~exist(figure_path, 'dir')
+    mkdir(figure_path);
+end
+
+% Find all channeldata uff files
+files = dir(fullfile(RF_channeldata_path, '*.uff')); % Scan object is saved in same place, change
+files = files(~cellfun('isempty', regexp({files.name}, '^ULMShare_\d+\.uff$'))); % Then remove, when scan is moved
+uffFiles = fullfile({files.folder}, {files.name});
+nFiles = numel(uffFiles);
+fprintf('Found %d UFF-files.\n', nFiles);
+
+for i = 1:nFiles
+    fprintf('%2d: %s\n', i, files(i).name);
+end
+
+% Scan
+scan = uff.read_object(fullfile(RF_channeldata_path, 'ULMShare_scan.uff'), '/scan');
+
+% Lambda
+ch_data = uff.read_object(uffFiles{1}, '/channel_data');
+lambda = ch_data.lambda;
+
+% Frames
+total_frames = size(ch_data.data, 4);
+clear ch_data
+
+
+%% 2. Set up Beamforming
+scan = tools.scan_integer_upscale(scan, 2);
+
+% Preprocess SVD-filter
+svd = preprocess.svd_filter();
+svd.cutoff = 5;
+
+% DAS
+das = midprocess.das();
+das.dimension = dimension.transmit;
+das.scan = scan;
+das.receive_apodization.f_number = 1.4; 
+das.receive_apodization.window = uff.window.hamming;
+
+% CF
+cf = postprocess.coherence_factor();
+cf.dimension = dimension.receive;
+
+% Coherent Compounding 
+das_rx = postprocess.coherent_compounding();
+das_rx.dimension = dimension.receive;
+
+%% 3. Beamforming batches
+batch_size = 10;
+frame_rate = 1000; 
+
+for file = 1:nFiles
+    ch_data = uff.read_object(uffFiles{file}, '/channel_data');
+    svd.input = ch_data;
+    svd_ch_data = svd.go();
+
+    for start_frame = 1:batch_size:total_frames
+        end_frame = min(start_frame + batch_size - 1, total_frames);
+        fprintf('Processing frames %d to %d of %d...\n', start_frame, end_frame, total_frames);
+        
+        % Slice current batch of frames
+        frame_idx = start_frame:end_frame;
+    
+        % SVD
+        svd_ch_data_batch = uff.channel_data(svd_ch_data); 
+        svd_ch_data_batch.data = svd_ch_data.data(:,:,:,frame_idx);
+    
+        % DAS
+        das.channel_data = svd_ch_data_batch;
+        b_tx_batch = das.go();
+    
+        % CF
+        cf.input = b_tx_batch;
+        b_CF_batch = cf.go();
+        b_CF_batch.frame_rate = frame_rate; 
+    
+        % Coherent compounding 
+        das_rx.input = b_tx_batch;
+        b_DAS_batch = das_rx.go();
+        b_DAS_batch.frame_rate = frame_rate; %?
+    
+        if start_frame == 1
+            b_CF_file = b_CF_batch;
+            b_DAS_file = b_DAS_batch;
+        else
+            b_CF_file.data = cat(4, b_CF_file.data, b_CF_batch.data);
+            b_DAS_file.data = cat(4, b_DAS_file.data, b_DAS_batch.data);
+        end
+    
+        clear svd_ch_data_batch b_tx_batch b_CF_batch b_DAS_batch;
+   
+    end
+    output_file_CF = fullfile(beamformed_path_CF, sprintf('beamformed_CF_%03d.uff', file)); % Change to use same naming convention as og file, not saved in the right place
+    output_file_DAS = fullfile(beamformed_path_DAS, sprintf('beamformed_DAS_%03d.uff', file)); % Change to use same naming convention as og file, not saved in right place
+    uff.write_object(output_file_CF, b_CF_file, 'b_data');
+    uff.write_object(output_file_DAS, b_DAS_file, 'b_data');
+
+    clear b_CF_file b_DAS_file ch_data svd_ch_data
+end
+
+
+%% Saving B-mode images
+% Save SVD filtered Coherence factor beamformed B-mode image
+b_data_CF = uff.read_object(fullfile(beamformed_path_CF, 'beamformed_CF_001.uff'), '/b_data');
+b_mode_CF = uff.beamformed_data(b_data_CF);
+b_mode_CF.data = b_data_CF.data(:, :, :, 1);
+
+fig_CF = figure('Visible','off');
+b_mode_CF.plot(fig_CF, 'ULMShare SVD-filtered CF', 60);
+exportgraphics(gca, fullfile(figure_path, 'Beamformed_CF_SVD.png'));
+
+% Save SVD filtered DAS beamformed B-mode image
+b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, 'beamformed_DAS_001.uff'), '/b_data');
+b_mode_DAS = uff.beamformed_data(b_data_DAS);
+b_mode_DAS.data = b_data_DAS.data(:, :, :, 1);
+
+fig_DAS = figure('Visible','off');
+b_mode_DAS.plot(fig_DAS, 'ULMShare SVD-filtered DAS', 60);
+exportgraphics(gca, fullfile(figure_path, 'Beamformed_DAS_SVD.png'));
+
+
+
+%% Step 4: The actual ULM part
+% With some data beamformed and configured, this step walks through a basic
+% configurationg of a ULM pipeline.
+% The basis for all pipelines is the ULM handle object. This creature
+% behaves similar to postprocesses, where a uff.beamformed_data is fed into
+% its 'input' property, and 'go()' executes its algorithm. However, there
+% are quite a few parameters and options that goes along with it. Some of
+% which will be covered here.
+
+% Start by instantiating a simple ULM object:
+u = ulm.ULM();
+
+% The following parameters used in chapter 5 of Simon A.
+% Bjørn's master's thesis, Table 5.1b: CF @ lambda/2:
+% The framerate specifies the framerate at which the RF data is captured.
+% This is required due its implications on linking particales across
+% frames.
+u.framerate = frame_rate;
+
+% The full-width half-maximum (fwhm) parameter tunes the kernel sizes of
+% initial particle position guesses, and is configured in number of pixels.
+% For this case, the fwhm is estimated to be 3x3 (width, height) pixels.
+u.fwhm = [5 5];
+
+% The numberOfParticles parameter sets the upper limit for how many
+% particles the ULM process tries to localize. If more than this number is
+% located, only the specified number of strongest points will be recorded.
+% This is per frame without heuristics, so overshooting a bit is better, as
+% this allows for a small amount of false positives in addition to true 
+% positives, instead of potentially discarding true positives. PALA uses 90
+% for this data set.
+u.numberOfParticles = 90; 
+
+% The intensity_threshold discards localizations below this intensity. The
+% data is normalized to the local noise level before ULM (see
+% ulm_per_buffer at the end of this script), so this is an SNR.
+u.intensity_threshold = 1.5;
+
+% The last 3 parameters are a bit more advanced and not well documented in
+% the toolbox yet. For now, see Chapter 3.3 "ULM implementation in USTB" 
+% of Simon A. Bjørn's master's thesis.
+u.NLocalMax = 7; % 7 for fwhm = [5 5]
+u.max_linking_distance = 3; 
+u.min_length = 15;
+
+% The next two options are not parameters, but settings deciding how the
+% ULM process is performed. 
+
+% The first is the algorithm, which specifies
+% which localization algorithm to use. The radial symmetry localization
+% algorithm is implemented under the ulm.algorithm.radial, and is quite
+% fast and efficient, so its used in this example. For other options, see
+% enumeration('ulm.algorithm')
+u.algorithm = ulm.algorithm.radial;
+
+% The second option specifies how the linker operates. In this example, we
+% want to compare the raw localized datapoints against ground truth, and so
+% we do not want any interpolation of the trackes based on velocity or
+% positions. This equates to using the "tracks" tracking algorithm, which
+% simply outputs a cell array, containing arrays of particle tracks over
+% with positions at each frame the track exists.
+u.tracking = ulm.tracking.tracks;
+
+% Lastly, the data from the previous step is supplied. Lambda must be
+% supplied separately, as beamformed_data has no lambda property.
+u.lambda = lambda;
+
+% Loop through the beamformed files
+CF_files = dir(fullfile(beamformed_path_CF, 'beamformed_CF_*.uff'));
+DAS_files = dir(fullfile(beamformed_path_DAS, 'beamformed_DAS_*.uff'));
+
+tracks_CF = {};
+tracks_DAS = {};
+
+for i = 1:length(CF_files)
+    b_data_CF = uff.read_object(fullfile(beamformed_path_CF, CF_files(i).name), '/b_data');
+    file_tracks_CF = ulm_per_buffer(u, b_data_CF);
+    tracks_CF = [tracks_CF; file_tracks_CF(:)];
+    clear b_data_CF;
+
+    b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, DAS_files(i).name), '/b_data');
+    file_tracks_DAS = ulm_per_buffer(u, b_data_DAS);
+    tracks_DAS = [tracks_DAS; file_tracks_DAS(:)];
+    clear b_data_DAS;
+end
+
+%% Step 5a: ULM Image construction
+% ULM is no fun without images.
+% To synthesize an ULM image from tracks, the aptly named "create_image"
+% method in the ULM process can be used. Simply feed it the tracks created
+% from the main "go()" process.
+
+% Synthesize a "track" image. Other image modes are available. See
+% enumeration("ulm.image_mode") for more
+% CF
+ulm_img = u.create_image(tracks_CF, "tracks");
+fig = figure('Visible', 'off');
+imagesc(scan.x_axis * 1e3, scan.z_axis * 1e3, ulm_img);
+xlabel("X [mm]");ylabel("z [mm]");
+title('ULM ULMShare - CF')
+colormap turbo;
+exportgraphics(gca, fullfile(figure_path, 'ULM_ULMShare_CF.png'));
+
+% DAS
+ulm_img = u.create_image(tracks_DAS, "tracks");
+fig = figure('Visible', 'off');
+imagesc(scan.x_axis * 1e3, scan.z_axis * 1e3, ulm_img);
+xlabel("X [mm]");ylabel("z [mm]");
+title('ULM ULMShare - DAS')
+colormap turbo;
+exportgraphics(gca, fullfile(figure_path, 'ULM_ULMShare_DAS.png'));
+
+
+%% Step 5b: ULM Image Construction with interpolation
+% As is visible, the image is quite choppy, and the tracks are pixelated.
+% This is because the tracking algorithm only used the particle positions
+% at every "full frame". This is especially visable for fast moving 
+% particles, as large gaps are formed as the particle moves multiple pixel
+% between frames. No interpolation, no smooth paths.
+% Changing the tracking algorithm to use velocity_interpolation instead
+% yields a much better image.
+
+u.tracking = ulm.tracking.velocity_interpolation;
+
+tracks_CF = {};
+tracks_DAS = {};
+
+for i = 1:length(CF_files)
+    b_data_CF = uff.read_object(fullfile(beamformed_path_CF, CF_files(i).name), '/b_data');
+    file_tracks_CF = ulm_per_buffer(u, b_data_CF);
+    tracks_CF = [tracks_CF; file_tracks_CF(:)];
+    clear b_data_CF;
+
+    b_data_DAS = uff.read_object(fullfile(beamformed_path_DAS, DAS_files(i).name), '/b_data');
+    file_tracks_DAS = ulm_per_buffer(u, b_data_DAS);
+    tracks_DAS = [tracks_DAS; file_tracks_DAS(:)];
+    clear b_data_DAS;
+end
+
+% CF
+ulm_img = u.create_image(tracks_CF, "tracks");
+fig = figure('Visible', 'off');
+imagesc(scan.x_axis * 1e3, scan.z_axis * 1e3, ulm_img);
+xlabel("X [mm]");ylabel("z [mm]");
+title('ULM ULMShare Interpolated - CF')
+colormap turbo;
+exportgraphics(gca, fullfile(figure_path, 'ULM_ULMShare_CF_interpolated.png'));
+
+% DAS
+ulm_img = u.create_image(tracks_DAS, "tracks");
+fig = figure('Visible', 'off');
+imagesc(scan.x_axis * 1e3, scan.z_axis * 1e3, ulm_img);
+xlabel("X [mm]");ylabel("z [mm]");
+title('ULM ULMShare Interpolated - DAS')
+colormap turbo;
+exportgraphics(gca, fullfile(figure_path, 'ULM_ULMShare_DAS_interpolated.png'));
+
+
+fprintf('\nSaved output images to...');
+    % ADD right files for ULMShare
+    % ':\n - %s\n - %s\n - %s\n - %s\n - %s\n - %s\n - %s\n'], ...
+    % [figure_path '/Beamformed_DAS_SVD_filtered.png'], ...
+    % [figure_path '/Beamformed_CF_SVD_filtered.png'], ...
+    % [figure_path '/ULM_InVivo_Rat_Brain_CF.png'], ...
+    % [figure_path '/ULM_InVivo_Rat_Brain_DAS.png'], ...
+    % [figure_path '/ULM_InVivo_Rat_Brain_interpolated_CF.png'], ...
+    % [figure_path '/ULM_InVivo_Rat_Brain_interpolated_DAS.png']);
+
+
+%% Local functions
+function tracks = ulm_per_buffer(u, b_data)
+% Runs ULM on one buffer at a time, so tracks are not linked across the
+% separate acquisitions. ULM keeps the numberOfParticles brightest maxima in
+% each frame, so each pixel is first divided by its RMS over time, smoothed
+% by a Gaussian of 9 pixels. Otherwise the maxima all end up in the
+% brightest region, which for DAS is the top of the image. This is the TGC
+% mask from ULMShare (code/example_script.m in
+% https://github.com/provostultrasoundlab/ulmshare, std 9 px from their
+% Table 3). ULMShare divides the data before the SVD filter by it and runs
+% the SVD again; here the envelope is divided directly.
+scan = b_data.scan;
+
+env = abs(b_data.data);
+env = reshape(env, scan.N_z_axis, scan.N_x_axis, []);
+env = env./imgaussfilt(sqrt(mean(env.^2, 3)), 9);
+b_buffer = uff.beamformed_data();
+b_buffer.scan = scan;
+b_buffer.data = reshape(env, scan.N_pixels, 1, 1, []);
+
+u.input = b_buffer;
+u.scan = scan;
+tracks = u.go();
+tracks = tracks(:);
+
+end
+
+
+
